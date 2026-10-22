@@ -1,4 +1,6 @@
 import * as ort from 'onnxruntime-web/webgpu';
+import ortMjs from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url';
+import ortWasm from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url';
 
 export interface Detection {
   x: number; // 원본 영상 픽셀 기준 좌상단
@@ -14,6 +16,9 @@ export type Backend = 'webgpu' | 'wasm';
 
 const SIZE = 416; // scripts/export_models.py 의 IMGSZ 와 같아야 함
 
+// ort 런타임을 별도 파일로 로드. 번들에 섞이면 멀티스레드 워커가 앱 번들(index.js)을
+// 워커 스크립트로 실행해 죽는다 (document is not defined)
+ort.env.wasm.wasmPaths = { mjs: ortMjs, wasm: ortWasm };
 // 멀티스레드 WASM은 crossOriginIsolated(COOP/COEP 헤더)일 때만 가능
 ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
 
