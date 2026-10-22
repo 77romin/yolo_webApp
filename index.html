@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>YOLO Live Recorder</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <button id="btn-camera">카메라 켜기</button>
+      <button id="btn-record" disabled>● 녹화</button>
+      <button id="btn-split" disabled>화면 분할</button>
+      <button id="btn-flip" disabled>전환</button>
+      <label>
+        되감기
+        <select id="sel-buffer">
+          <option value="1">1분</option>
+          <option value="3">3분</option>
+          <option value="5" selected>5분</option>
+          <option value="10">10분</option>
+        </select>
+      </label>
+      <span id="status"></span>
+    </header>
+
+    <div id="save-bar" hidden>
+      <span id="save-info"></span>
+      <button id="btn-download">파일로 저장</button>
+      <button id="btn-share">공유 / 사진에 저장</button>
+      <button id="btn-discard">삭제</button>
+    </div>
+
+    <main id="panels">
+      <section id="live-panel" class="panel">
+        <video id="live" autoplay muted playsinline></video>
+        <span class="badge live">LIVE</span>
+        <span id="rec-time" class="badge rec" hidden></span>
+      </section>
+
+      <section id="timeshift-panel" class="panel" hidden>
+        <div class="ts-videos">
+          <video id="ts-a" class="active" muted playsinline></video>
+          <video id="ts-b" muted playsinline></video>
+          <span id="ts-label" class="badge">-00:00</span>
+        </div>
+        <div class="ts-controls">
+          <button id="ts-back">−10초</button>
+          <button id="ts-play">⏸</button>
+          <button id="ts-fwd">+10초</button>
+          <input id="ts-seek" type="range" min="0" max="0" step="0.1" value="0" />
+          <button id="ts-mute">🔇</button>
+          <button id="ts-latest">최신</button>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
