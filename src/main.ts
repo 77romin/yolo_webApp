@@ -278,3 +278,17 @@ $('btn-discard').onclick = async () => {
 
 // 이전 접속에서 저장하지 않은 녹화가 남아 있으면 복구 제안
 loadSaved().then((rec) => rec && offerSave(rec, true));
+
+// --- PWA: 홈 화면 설치 + 오프라인 캐시 (개발 서버에서는 캐시가 방해되므로 배포 빌드에서만) ---
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
+  window.addEventListener('load', async () => {
+    const reg = await navigator.serviceWorker.ready;
+    const urls = performance
+      .getEntriesByType('resource')
+      .map((e) => e.name)
+      .filter((u) => new URL(u).origin === location.origin);
+    reg.active?.postMessage({ cache: urls });
+  });
+}
