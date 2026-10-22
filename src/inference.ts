@@ -45,7 +45,7 @@ export class LiveInference {
     if (!on) this.clear();
   }
 
-  private clear() {
+  clear() {
     this.detections = [];
     this.fps = 0;
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);

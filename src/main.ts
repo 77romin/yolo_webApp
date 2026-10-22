@@ -1,8 +1,8 @@
 import { ArchiveRecorder, clearSaved, loadSaved, type SavedRecording } from './archiveRecorder';
 import { keepAwake, startCamera, stopStream, type Facing } from './camera';
-import { Detector } from './detector';
 import { LiveInference } from './inference';
 import { extensionFor, formatClock, pickMimeType } from './media';
+import { detectorFor, MODES, type Mode } from './modes';
 import { SegmentRecorder } from './segmentRecorder';
 import { TimeshiftPlayer } from './timeshift';
 
@@ -50,15 +50,45 @@ function setStatus(msg: string) {
 function renderStatus() {
   const parts = [notice || mime.split(';')[0]];
   const det = inference.detector;
-  if (!det) parts.push('모델 로딩…');
-  else if (stream && inference.enabled) parts.push(`${det.backend} ${inference.fps.toFixed(1)}fps · ${inference.detections.length}개`);
+  if (loading) parts.push(`${loading} 모델 로딩…`);
+  else if (det && stream && inference.enabled) parts.push(`${det.backend} ${inference.fps.toFixed(1)}fps · ${inference.detections.length}개`);
   status.textContent = parts.join(' · ');
 }
 setInterval(renderStatus, 500);
 
-Detector.load(`${import.meta.env.BASE_URL}models/yolo11n.onnx`)
-  .then((d) => (inference.detector = d))
-  .catch((e) => setStatus((e as Error).message));
+// --- 카테고리 모드 ---
+
+const modeBar = $('modes');
+let loading = '';
+let modeId = '';
+
+async function selectMode(mode: Mode) {
+  modeId = mode.id;
+  localStorage.setItem('mode', mode.id);
+  for (const b of modeBar.children) b.classList.toggle('on', (b as HTMLElement).dataset.mode === mode.id);
+  inference.detector = null; // 새 모델 준비될 때까지 이전 박스를 지우고 멈춤
+  inference.clear();
+  loading = mode.label;
+  try {
+    const detector = await detectorFor(mode);
+    if (modeId !== mode.id) return; // 로딩 중 다른 모드를 눌렀음
+    inference.options = mode.options;
+    inference.detector = detector;
+  } catch (e) {
+    if (modeId === mode.id) setStatus((e as Error).message);
+  } finally {
+    if (modeId === mode.id) loading = '';
+  }
+}
+
+for (const mode of MODES) {
+  const b = document.createElement('button');
+  b.textContent = mode.label;
+  b.dataset.mode = mode.id;
+  b.onclick = () => selectMode(mode);
+  modeBar.append(b);
+}
+selectMode(MODES.find((m) => m.id === localStorage.getItem('mode')) ?? MODES[0]);
 
 async function openCamera() {
   stopStream(stream);

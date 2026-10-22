@@ -57,6 +57,23 @@ button.on {
   background: #1b3a1b;
 }
 
+#modes {
+  display: flex;
+  gap: 6px;
+  padding: 0 6px 6px;
+  overflow-x: auto;
+}
+
+#modes button {
+  flex: none;
+  border-radius: 999px;
+}
+
+#modes button.on {
+  background: #f5f5f5;
+  color: #111;
+}
+
 #status {
   margin-left: auto;
   opacity: 0.7;
