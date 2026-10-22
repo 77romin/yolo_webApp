@@ -56,6 +56,15 @@ export class SegmentRecorder {
     this.segments = [];
   }
 
+  /** 버퍼는 유지한 채 녹화 소스만 교체 (조각이 각각 독립 파일이라 가능) */
+  setStream(stream: MediaStream) {
+    this.stream = stream;
+    if (!this.running) return;
+    clearInterval(this.timer);
+    this.rotate();
+    this.timer = window.setInterval(() => this.rotate(), this.segMs);
+  }
+
   setMaxMs(ms: number) {
     this.maxMs = ms;
     this.prune();

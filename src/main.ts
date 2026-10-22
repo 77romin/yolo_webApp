@@ -1,5 +1,6 @@
 import { ArchiveRecorder, clearSaved, loadSaved, type SavedRecording } from './archiveRecorder';
 import { keepAwake, startCamera, stopStream, type Facing } from './camera';
+import { Compositor } from './compositor';
 import { LiveInference } from './inference';
 import { extensionFor, formatClock, pickMimeType } from './media';
 import { detectorFor, MODES, type Mode } from './modes';
@@ -14,6 +15,7 @@ const btnSplit = $<HTMLButtonElement>('btn-split');
 const btnFlip = $<HTMLButtonElement>('btn-flip');
 const btnDetect = $<HTMLButtonElement>('btn-detect');
 const selBuffer = $<HTMLSelectElement>('sel-buffer');
+const selSource = $<HTMLSelectElement>('sel-source');
 const status = $('status');
 const live = $<HTMLVideoElement>('live');
 const recTime = $('rec-time');
@@ -25,7 +27,9 @@ const saveInfo = $('save-info');
 const mime = pickMimeType();
 const bufferMs = () => Number(selBuffer.value) * 60_000;
 
-const inference = new LiveInference(live, $<HTMLCanvasElement>('overlay'));
+const overlay = $<HTMLCanvasElement>('overlay');
+const inference = new LiveInference(live, overlay);
+const compositor = new Compositor(live, overlay);
 const segments = new SegmentRecorder(mime, bufferMs());
 const archive = new ArchiveRecorder(mime);
 const player = new TimeshiftPlayer(segments, [$<HTMLVideoElement>('ts-a'), $<HTMLVideoElement>('ts-b')], {
@@ -34,7 +38,8 @@ const player = new TimeshiftPlayer(segments, [$<HTMLVideoElement>('ts-a'), $<HTM
   playBtn: $<HTMLButtonElement>('ts-play'),
 });
 
-let stream: MediaStream | null = null;
+let stream: MediaStream | null = null; // 카메라 원본
+let source: MediaStream | null = null; // 실제 녹화 소스 (원본 또는 박스 합성)
 let facing: Facing = 'environment';
 let split = false;
 let muted = true;
@@ -90,12 +95,38 @@ for (const mode of MODES) {
 }
 selectMode(MODES.find((m) => m.id === localStorage.getItem('mode')) ?? MODES[0]);
 
+// --- 녹화 소스 (원본 / 박스 포함) ---
+
+selSource.value = localStorage.getItem('source') ?? 'raw';
+const withBoxes = () => selSource.value === 'boxes';
+
+selSource.onchange = () => {
+  localStorage.setItem('source', selSource.value);
+  if (!stream) return;
+  // 새 소스로 되감기 조각을 넘긴 뒤 이전 합성을 정지 (버퍼는 유지)
+  if (withBoxes()) {
+    source = compositor.start(stream);
+    segments.setStream(source);
+  } else {
+    source = stream;
+    segments.setStream(source);
+    compositor.stop();
+  }
+};
+
+function videoReady(v: HTMLVideoElement) {
+  return v.readyState >= 1 ? Promise.resolve() : new Promise((r) => v.addEventListener('loadedmetadata', r, { once: true }));
+}
+
 async function openCamera() {
+  compositor.stop();
   stopStream(stream);
   stream = await startCamera(facing);
   live.srcObject = stream;
+  await videoReady(live);
+  source = withBoxes() ? compositor.start(stream) : stream;
   // 카메라가 켜져 있는 동안 되감기 버퍼는 항상 쌓는다 (녹화 버튼과 무관)
-  segments.start(stream);
+  segments.start(source);
   inference.start();
   if (split) {
     player.hide();
@@ -110,8 +141,9 @@ btnCamera.onclick = async () => {
     segments.stop();
     segments.clear();
     inference.stop();
+    compositor.stop();
     stopStream(stream);
-    stream = null;
+    stream = source = null;
     live.srcObject = null;
     btnCamera.textContent = '카메라 켜기';
     [btnRecord, btnSplit, btnFlip].forEach((b) => (b.disabled = true));
@@ -135,7 +167,8 @@ btnFlip.onclick = async () => {
 
 async function startRecording() {
   pending = null;
-  await archive.start(stream!);
+  await archive.start(source!);
+  selSource.disabled = true; // 녹화 중에는 한 파일 안에서 소스를 바꿀 수 없음
   btnRecord.textContent = '■ 정지';
   btnRecord.classList.add('on');
   btnFlip.disabled = true; // 녹화 중 스트림 교체 불가
@@ -151,6 +184,7 @@ async function stopRecording() {
   btnRecord.textContent = '● 녹화';
   btnRecord.classList.remove('on');
   btnFlip.disabled = false;
+  selSource.disabled = false;
   setStatus('저장 중…');
   const saved = await archive.stop();
   setStatus('');
