@@ -1,5 +1,7 @@
 import { ArchiveRecorder, clearSaved, loadSaved, type SavedRecording } from './archiveRecorder';
 import { keepAwake, startCamera, stopStream, type Facing } from './camera';
+import { Detector } from './detector';
+import { LiveInference } from './inference';
 import { extensionFor, formatClock, pickMimeType } from './media';
 import { SegmentRecorder } from './segmentRecorder';
 import { TimeshiftPlayer } from './timeshift';
@@ -10,6 +12,7 @@ const btnCamera = $<HTMLButtonElement>('btn-camera');
 const btnRecord = $<HTMLButtonElement>('btn-record');
 const btnSplit = $<HTMLButtonElement>('btn-split');
 const btnFlip = $<HTMLButtonElement>('btn-flip');
+const btnDetect = $<HTMLButtonElement>('btn-detect');
 const selBuffer = $<HTMLSelectElement>('sel-buffer');
 const status = $('status');
 const live = $<HTMLVideoElement>('live');
@@ -22,6 +25,7 @@ const saveInfo = $('save-info');
 const mime = pickMimeType();
 const bufferMs = () => Number(selBuffer.value) * 60_000;
 
+const inference = new LiveInference(live, $<HTMLCanvasElement>('overlay'));
 const segments = new SegmentRecorder(mime, bufferMs());
 const archive = new ArchiveRecorder(mime);
 const player = new TimeshiftPlayer(segments, [$<HTMLVideoElement>('ts-a'), $<HTMLVideoElement>('ts-b')], {
@@ -36,10 +40,25 @@ let split = false;
 let muted = true;
 let recTimer = 0;
 let pending: SavedRecording | null = null;
+let notice = '';
 
 function setStatus(msg: string) {
-  status.textContent = msg;
+  notice = msg;
+  renderStatus();
 }
+
+function renderStatus() {
+  const parts = [notice || mime.split(';')[0]];
+  const det = inference.detector;
+  if (!det) parts.push('모델 로딩…');
+  else if (stream && inference.enabled) parts.push(`${det.backend} ${inference.fps.toFixed(1)}fps · ${inference.detections.length}개`);
+  status.textContent = parts.join(' · ');
+}
+setInterval(renderStatus, 500);
+
+Detector.load(`${import.meta.env.BASE_URL}models/yolo11n.onnx`)
+  .then((d) => (inference.detector = d))
+  .catch((e) => setStatus((e as Error).message));
 
 async function openCamera() {
   stopStream(stream);
@@ -47,6 +66,7 @@ async function openCamera() {
   live.srcObject = stream;
   // 카메라가 켜져 있는 동안 되감기 버퍼는 항상 쌓는다 (녹화 버튼과 무관)
   segments.start(stream);
+  inference.start();
   if (split) {
     player.hide();
     player.show();
@@ -59,6 +79,7 @@ btnCamera.onclick = async () => {
     if (split) toggleSplit();
     segments.stop();
     segments.clear();
+    inference.stop();
     stopStream(stream);
     stream = null;
     live.srcObject = null;
@@ -71,7 +92,7 @@ btnCamera.onclick = async () => {
     keepAwake();
     btnCamera.textContent = '카메라 끄기';
     [btnRecord, btnSplit, btnFlip].forEach((b) => (b.disabled = false));
-    setStatus(mime.split(';')[0]);
+    setStatus('');
   } catch (e) {
     setStatus(`카메라 오류: ${(e as Error).message}`);
   }
@@ -102,7 +123,7 @@ async function stopRecording() {
   btnFlip.disabled = false;
   setStatus('저장 중…');
   const saved = await archive.stop();
-  setStatus(mime.split(';')[0]);
+  setStatus('');
   if (saved) offerSave(saved);
 }
 
@@ -127,6 +148,11 @@ function toggleSplit() {
 }
 
 btnSplit.onclick = toggleSplit;
+btnDetect.onclick = () => {
+  inference.setEnabled(!inference.enabled);
+  btnDetect.classList.toggle('on', inference.enabled);
+  btnDetect.textContent = inference.enabled ? '인식 ON' : '인식 OFF';
+};
 selBuffer.onchange = () => segments.setMaxMs(bufferMs());
 
 $('ts-back').onclick = () => player.skip(-10);

@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link rel="icon" href="data:," />
     <title>YOLO Live Recorder</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -13,6 +15,7 @@
       <button id="btn-record" disabled>● 녹화</button>
       <button id="btn-split" disabled>화면 분할</button>
       <button id="btn-flip" disabled>전환</button>
+      <button id="btn-detect" class="on">인식 ON</button>
       <label>
         되감기
         <select id="sel-buffer">
@@ -35,6 +38,7 @@
     <main id="panels">
       <section id="live-panel" class="panel">
         <video id="live" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
         <span class="badge live">LIVE</span>
         <span id="rec-time" class="badge rec" hidden></span>
       </section>
