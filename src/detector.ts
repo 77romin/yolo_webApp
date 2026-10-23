@@ -22,6 +22,11 @@ ort.env.wasm.wasmPaths = { mjs: ortMjs, wasm: ortWasm };
 // 멀티스레드 WASM은 crossOriginIsolated(COOP/COEP 헤더)일 때만 가능
 ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
 
+// WebKit(Safari, 그리고 iPhone의 모든 브라우저)에서는 ort WebGPU가 추론할 때마다 메모리를 해제하지 않아
+// 초당 ~100MB씩 늘어나 iPhone에서 10~15초 만에 탭이 강제 종료된다. WASM은 메모리가 일정하므로 WASM 사용.
+// (iOS Chrome UA에는 'Chrome/'가 없고 'CriOS/'가 있음)
+const isWebKit = /AppleWebKit/.test(navigator.userAgent) && !/Chrome\/|Chromium\/|Edg\//.test(navigator.userAgent);
+
 export class Detector {
   private canvas = new OffscreenCanvas(SIZE, SIZE);
   private ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
@@ -33,11 +38,11 @@ export class Detector {
     readonly pose: boolean,
   ) {}
 
-  /** WebGPU 우선, 실패하면 WASM */
+  /** WebGPU 우선(WebKit 제외), 실패하면 WASM */
   static async load(url: string, pose = false): Promise<Detector> {
     const errors: string[] = [];
     for (const backend of ['webgpu', 'wasm'] as Backend[]) {
-      if (backend === 'webgpu' && !('gpu' in navigator)) continue;
+      if (backend === 'webgpu' && (isWebKit || !('gpu' in navigator))) continue;
       try {
         const session = await ort.InferenceSession.create(url, {
           executionProviders: [backend],
