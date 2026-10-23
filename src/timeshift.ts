@@ -63,10 +63,11 @@ export class TimeshiftPlayer {
     return this.current ? this.current.start + this.video.currentTime * 1000 : null;
   }
 
-  show() {
+  /** delayMs 전 시점부터 재생 시작 */
+  show(delayMs: number) {
+    clearInterval(this.uiTimer);
     this.uiTimer = window.setInterval(() => this.renderUI(), 250);
-    // 처음 열면 10초 전부터
-    this.seekTo(Date.now() - 10_000);
+    this.seekTo(Date.now() - delayMs);
   }
 
   hide() {

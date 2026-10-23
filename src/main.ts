@@ -1,6 +1,7 @@
 import { ArchiveRecorder, clearSaved, loadSaved, type SavedRecording } from './archiveRecorder';
 import { keepAwake, startCamera, stopStream, type Facing } from './camera';
 import { Compositor } from './compositor';
+import { FRAME_DELAY_MAX_MS, FrameDelay } from './frameDelay';
 import { LiveInference } from './inference';
 import { extensionFor, formatClock, pickMimeType } from './media';
 import { detectorFor, MODES, type Mode } from './modes';
@@ -20,6 +21,9 @@ const status = $('status');
 const live = $<HTMLVideoElement>('live');
 const recTime = $('rec-time');
 const tsPanel = $('timeshift-panel');
+const tsDelay = $<HTMLSelectElement>('ts-delay');
+const tsLive = $<HTMLVideoElement>('ts-live');
+const tsLabel = $('ts-label');
 const tsMute = $<HTMLButtonElement>('ts-mute');
 const saveBar = $('save-bar');
 const saveInfo = $('save-info');
@@ -32,9 +36,12 @@ const inference = new LiveInference(live, overlay);
 const compositor = new Compositor(live, overlay);
 const segments = new SegmentRecorder(mime, bufferMs());
 const archive = new ArchiveRecorder(mime);
+const frameDelay = new FrameDelay(live, $<HTMLCanvasElement>('ts-frames'), () =>
+  withBoxes() && compositor.running ? compositor.canvas : live,
+);
 const player = new TimeshiftPlayer(segments, [$<HTMLVideoElement>('ts-a'), $<HTMLVideoElement>('ts-b')], {
   seek: $<HTMLInputElement>('ts-seek'),
-  label: $('ts-label'),
+  label: tsLabel,
   playBtn: $<HTMLButtonElement>('ts-play'),
 });
 
@@ -112,6 +119,7 @@ selSource.onchange = () => {
     segments.setStream(source);
     compositor.stop();
   }
+  if (split && view === 'live') tsLive.srcObject = source;
 };
 
 function videoReady(v: HTMLVideoElement) {
@@ -128,10 +136,7 @@ async function openCamera() {
   // 카메라가 켜져 있는 동안 되감기 버퍼는 항상 쌓는다 (녹화 버튼과 무관)
   segments.start(source);
   inference.start();
-  if (split) {
-    player.hide();
-    player.show();
-  }
+  if (split) applyDelay(true);
 }
 
 btnCamera.onclick = async () => {
@@ -208,7 +213,7 @@ function toggleSplit() {
   split = !split;
   tsPanel.hidden = !split;
   btnSplit.classList.toggle('on', split);
-  split ? player.show() : player.hide();
+  split ? applyDelay(true) : stopDelayViews();
 }
 
 btnSplit.onclick = toggleSplit;
@@ -218,6 +223,47 @@ btnDetect.onclick = () => {
   btnDetect.textContent = inference.enabled ? '인식 ON' : '인식 OFF';
 };
 selBuffer.onchange = () => segments.setMaxMs(bufferMs());
+
+// --- 아래 패널 지연 설정 ---
+
+type View = 'live' | 'frames' | 'segments';
+let view: View | null = null;
+tsDelay.value = localStorage.getItem('delay') ?? '5000';
+
+function stopDelayViews() {
+  player.hide();
+  frameDelay.stop();
+  tsLive.srcObject = null;
+  view = null;
+}
+
+/** 선택한 지연에 맞는 표시 방식으로 전환. restart=false면 같은 방식 안에서는 이어서 진행 */
+function applyDelay(restart = false) {
+  const ms = Number(tsDelay.value);
+  const next: View = ms === 0 ? 'live' : ms <= FRAME_DELAY_MAX_MS ? 'frames' : 'segments';
+  tsPanel.dataset.view = next;
+
+  if (next === 'frames' && view === 'frames' && !restart) {
+    frameDelay.delay = ms; // 버퍼를 비우지 않고 지연만 변경
+  } else {
+    stopDelayViews();
+    if (next === 'live') {
+      tsLive.srcObject = source;
+      tsLive.play().catch(() => {});
+    } else if (next === 'frames') {
+      frameDelay.start(ms);
+    } else {
+      player.show(ms);
+    }
+  }
+  view = next;
+  if (next !== 'segments') tsLabel.textContent = tsDelay.selectedOptions[0].text;
+}
+
+tsDelay.onchange = () => {
+  localStorage.setItem('delay', tsDelay.value);
+  if (split) applyDelay();
+};
 
 $('ts-back').onclick = () => player.skip(-10);
 $('ts-fwd').onclick = () => player.skip(10);

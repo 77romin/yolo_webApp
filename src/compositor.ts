@@ -3,7 +3,7 @@
  * 한 캔버스에 그리고, 그 캔버스를 카메라 오디오와 묶어 녹화용 스트림으로 내보낸다.
  */
 export class Compositor {
-  private canvas = document.createElement('canvas');
+  readonly canvas = document.createElement('canvas');
   private ctx = this.canvas.getContext('2d')!;
   private output: MediaStream | null = null;
 

@@ -58,17 +58,28 @@
 
       <section id="timeshift-panel" class="panel" hidden>
         <div class="ts-videos">
-          <video id="ts-a" class="active" muted playsinline></video>
-          <video id="ts-b" muted playsinline></video>
+          <video id="ts-a" class="active seg-only" muted playsinline></video>
+          <video id="ts-b" class="seg-only" muted playsinline></video>
+          <video id="ts-live" muted playsinline></video>
+          <canvas id="ts-frames"></canvas>
           <span id="ts-label" class="badge">-00:00</span>
         </div>
         <div class="ts-controls">
-          <button id="ts-back">−10초</button>
-          <button id="ts-play">⏸</button>
-          <button id="ts-fwd">+10초</button>
-          <input id="ts-seek" type="range" min="0" max="0" step="0.1" value="0" />
-          <button id="ts-mute">🔇</button>
-          <button id="ts-latest">최신</button>
+          <select id="ts-delay">
+            <option value="0">실시간</option>
+            <option value="500">−0.5초</option>
+            <option value="1000">−1초</option>
+            <option value="2000">−2초</option>
+            <option value="5000">−5초</option>
+            <option value="10000">−10초</option>
+            <option value="30000">−30초</option>
+          </select>
+          <button id="ts-back" class="seg-only">−10초</button>
+          <button id="ts-play" class="seg-only">⏸</button>
+          <button id="ts-fwd" class="seg-only">+10초</button>
+          <input id="ts-seek" class="seg-only" type="range" min="0" max="0" step="0.1" value="0" />
+          <button id="ts-mute" class="seg-only">🔇</button>
+          <button id="ts-latest" class="seg-only">최신</button>
         </div>
       </section>
     </main>
