@@ -20,6 +20,11 @@ export class TimeshiftPlayer {
   private dragging = false;
   private uiTimer = 0;
   private loadToken = 0;
+  /**
+   * 목표 지연(라이브보다 몇 ms 뒤를 보여줄지). 조각의 실제 길이가 시작 간격보다 조금 길고(Safari ~3.1초/3초),
+   * 로딩이 늦어지기도 해서 그냥 이어 재생하면 지연이 계속 늘어난다 → 이 값에 맞춰 위치를 보정.
+   */
+  private delayMs = 0;
 
   constructor(
     private buf: SegmentRecorder,
@@ -67,7 +72,8 @@ export class TimeshiftPlayer {
   show(delayMs: number) {
     clearInterval(this.uiTimer);
     this.uiTimer = window.setInterval(() => this.renderUI(), 250);
-    this.seekTo(Date.now() - delayMs);
+    this.delayMs = delayMs;
+    this.jumpTo(Date.now() - delayMs);
   }
 
   hide() {
@@ -81,7 +87,15 @@ export class TimeshiftPlayer {
     this.waitingForNext = false;
   }
 
+  /** 사용자가 위치를 옮김 → 그 위치의 지연을 새 목표로 */
   seekTo(t: number) {
+    const segs = this.buf.segments;
+    if (segs.length) t = Math.min(Math.max(t, segs[0].start), segs.at(-1)!.end);
+    this.delayMs = Date.now() - t;
+    this.jumpTo(t);
+  }
+
+  private jumpTo(t: number) {
     const segs = this.buf.segments;
     if (!segs.length) {
       this.current = null;
@@ -101,13 +115,17 @@ export class TimeshiftPlayer {
   /** 가장 최근 조각으로 (라이브보다 약 3~6초 뒤) */
   latest() {
     const last = this.buf.segments.at(-1);
-    if (last) this.load(last, 0);
+    if (last) this.seekTo(last.start);
   }
 
   togglePause() {
     this.paused = !this.paused;
     if (this.paused) this.video.pause();
-    else this.video.play().catch(() => {});
+    else {
+      this.video.play().catch(() => {});
+      const pos = this.position;
+      if (pos !== null) this.delayMs = Date.now() - pos; // 멈춰 있던 만큼 지연이 늘어난 상태로 이어서
+    }
     this.ui.playBtn.textContent = this.paused ? '▶' : '⏸';
   }
 
@@ -153,7 +171,7 @@ export class TimeshiftPlayer {
   }
 
   private advance() {
-    if (!this.current) return this.seekTo(0);
+    if (!this.current) return this.jumpTo(Date.now() - this.delayMs); // 첫 조각 도착 — 목표 지연 유지
     const next = this.nextOf(this.current);
     if (!next) {
       this.waitingForNext = true; // 라이브 직전까지 따라잡음 → 다음 조각 대기
@@ -167,7 +185,10 @@ export class TimeshiftPlayer {
     this.video.classList.add('active');
     this.current = next;
     this.preloaded = null;
-    this.video.currentTime = 0;
+    // 밀린 만큼 다음 조각 안에서 앞으로 건너뛰어 목표 지연 유지
+    const behind = (Date.now() - this.delayMs - next.start) / 1000;
+    const dur = this.video.duration;
+    this.video.currentTime = behind > 0.2 ? (Number.isFinite(dur) ? Math.min(behind, dur - 0.1) : behind) : 0;
     if (!this.paused) this.video.play().catch(() => {});
     this.preloadNext();
   }
@@ -182,6 +203,16 @@ export class TimeshiftPlayer {
     if (pos === null || this.dragging) return;
     this.ui.seek.value = String((pos - first) / 1000);
     this.renderLabel(pos);
+    this.correctDrift(pos, last);
+  }
+
+  /** 로딩 지연 등으로 목표보다 1.5초 넘게 밀리면 목표 위치로 이동 */
+  private correctDrift(pos: number, bufferEnd: number) {
+    const v = this.video;
+    if (this.paused || v.paused || v.readyState < 3) return; // 로딩 중에는 판단하지 않음
+    const target = Date.now() - this.delayMs;
+    if (Math.abs(target - pos) < 1500 || target > bufferEnd - 500) return; // 버퍼 끝을 넘는 목표는 따라갈 수 없음
+    this.jumpTo(target);
   }
 
   private renderLabel(pos: number) {
