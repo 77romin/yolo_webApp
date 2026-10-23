@@ -1,10 +1,12 @@
-import { ArchiveRecorder, clearSaved, loadSaved, type SavedRecording } from './archiveRecorder';
+import { ArchiveRecorder } from './archiveRecorder';
 import { keepAwake, startCamera, stopStream, type Facing } from './camera';
 import { Compositor } from './compositor';
 import { FRAME_DELAY_MAX_MS, FrameDelay } from './frameDelay';
 import { LiveInference } from './inference';
-import { extensionFor, formatClock, pickMimeType } from './media';
+import { formatClock, pickMimeType } from './media';
 import { detectorFor, MODES, type Mode } from './modes';
+import { registerPWA } from './pwa';
+import { SaveBar } from './saveBar';
 import { SegmentRecorder } from './segmentRecorder';
 import { TimeshiftPlayer } from './timeshift';
 
@@ -25,8 +27,6 @@ const tsDelay = $<HTMLSelectElement>('ts-delay');
 const tsLive = $<HTMLVideoElement>('ts-live');
 const tsLabel = $('ts-label');
 const tsMute = $<HTMLButtonElement>('ts-mute');
-const saveBar = $('save-bar');
-const saveInfo = $('save-info');
 
 const mime = pickMimeType();
 const bufferMs = () => Number(selBuffer.value) * 60_000;
@@ -36,6 +36,7 @@ const inference = new LiveInference(live, overlay);
 const compositor = new Compositor(live, overlay);
 const segments = new SegmentRecorder(mime, bufferMs());
 const archive = new ArchiveRecorder(mime);
+const saveBar = new SaveBar();
 const frameDelay = new FrameDelay(live, $<HTMLCanvasElement>('ts-frames'), () =>
   withBoxes() && compositor.running ? compositor.canvas : live,
 );
@@ -51,7 +52,6 @@ let facing: Facing = 'environment';
 let split = false;
 let muted = true;
 let recTimer = 0;
-let pending: SavedRecording | null = null;
 let notice = '';
 
 function setStatus(msg: string) {
@@ -171,7 +171,7 @@ btnFlip.onclick = async () => {
 };
 
 async function startRecording() {
-  pending = null;
+  saveBar.pending = null;
   await archive.start(source!);
   selSource.disabled = true; // 녹화 중에는 한 파일 안에서 소스를 바꿀 수 없음
   btnRecord.textContent = '■ 정지';
@@ -193,12 +193,12 @@ async function stopRecording() {
   setStatus('저장 중…');
   const saved = await archive.stop();
   setStatus('');
-  if (saved) offerSave(saved);
+  if (saved) saveBar.offer(saved);
 }
 
 btnRecord.onclick = async () => {
-  if (pending && !confirm('저장하지 않은 녹화가 있습니다. 새로 녹화하면 지워집니다. 계속할까요?')) return;
-  hideSave();
+  if (!saveBar.confirmOverwrite()) return;
+  saveBar.hide();
   btnRecord.disabled = true;
   try {
     archive.recording ? await stopRecording() : await startRecording();
@@ -275,66 +275,4 @@ tsMute.onclick = () => {
   player.setMuted(muted);
 };
 
-// --- 저장 ---
-
-function fileOf(rec: SavedRecording) {
-  const d = new Date(rec.startedAt);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const name = `live_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-  return new File([rec.blob], `${name}.${extensionFor(rec.blob.type)}`, { type: rec.blob.type });
-}
-
-function offerSave(rec: SavedRecording, recovered = false) {
-  pending = rec;
-  const mb = (rec.blob.size / 1024 / 1024).toFixed(1);
-  saveInfo.textContent = `${recovered ? '이전 녹화 발견' : '녹화 완료'} (${mb}MB)`;
-  $('btn-share').hidden = !navigator.canShare?.({ files: [fileOf(rec)] });
-  saveBar.hidden = false;
-}
-
-function hideSave() {
-  saveBar.hidden = true;
-}
-
-$('btn-download').onclick = () => {
-  if (!pending) return;
-  const file = fileOf(pending);
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(file);
-  a.download = file.name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
-};
-
-$('btn-share').onclick = async () => {
-  if (!pending) return;
-  try {
-    await navigator.share({ files: [fileOf(pending)] });
-  } catch {
-    // 사용자가 공유 시트를 닫음
-  }
-};
-
-$('btn-discard').onclick = async () => {
-  if (!confirm('녹화를 삭제할까요?')) return;
-  await clearSaved();
-  pending = null;
-  hideSave();
-};
-
-// 이전 접속에서 저장하지 않은 녹화가 남아 있으면 복구 제안
-loadSaved().then((rec) => rec && offerSave(rec, true));
-
-// --- PWA: 홈 화면 설치 + 오프라인 캐시 (개발 서버에서는 캐시가 방해되므로 배포 빌드에서만) ---
-
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
-  window.addEventListener('load', async () => {
-    const reg = await navigator.serviceWorker.ready;
-    const urls = performance
-      .getEntriesByType('resource')
-      .map((e) => e.name)
-      .filter((u) => new URL(u).origin === location.origin);
-    reg.active?.postMessage({ cache: urls });
-  });
-}
+registerPWA();

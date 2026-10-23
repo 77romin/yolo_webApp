@@ -1,5 +1,5 @@
 // 오프라인 캐시: 공연장처럼 네트워크가 약한 곳에서도 앱과 모델이 열리도록
-const CACHE = 'yolo-live-v1';
+const CACHE = 'yolo-live-v2';
 const MODELS = ['models/yolo11n.onnx', 'models/yolo11n-pose.onnx'];
 
 self.addEventListener('install', (e) => {
@@ -32,15 +32,15 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
 
   if (req.mode === 'navigate') {
-    // HTML은 네트워크 우선 → 새 버전 배포가 바로 반영됨
+    // HTML은 네트워크 우선 → 새 버전 배포가 바로 반영됨. 페이지(/, /camera, /studio)별로 캐시
     e.respondWith(
       fetch(req)
         .then((res) => {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('./', copy));
+          caches.open(CACHE).then((c) => c.put(req, copy));
           return res;
         })
-        .catch(() => caches.match('./')),
+        .catch(() => caches.match(req).then((hit) => hit || caches.match('./'))),
     );
     return;
   }
