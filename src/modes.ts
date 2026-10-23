@@ -1,5 +1,5 @@
-import { Detector } from './detector';
-import type { DetectOptions } from './inference';
+import type { DetectOptions } from './detector';
+import { RemoteDetector } from './detectorClient';
 
 export interface Mode {
   id: string;
@@ -16,13 +16,13 @@ export const MODES: Mode[] = [
   { id: 'pose', label: '동작', model: 'yolo11n-pose.onnx', pose: true, options: { minScore: 0.4 } },
 ];
 
-const cache = new Map<string, Promise<Detector>>();
+const cache = new Map<string, Promise<RemoteDetector>>();
 
 /** 모드가 쓰는 모델을 로드(같은 모델은 한 번만) */
-export function detectorFor(mode: Mode): Promise<Detector> {
+export function detectorFor(mode: Mode): Promise<RemoteDetector> {
   let d = cache.get(mode.model);
   if (!d) {
-    d = Detector.load(`${import.meta.env.BASE_URL}models/${mode.model}`, mode.pose);
+    d = RemoteDetector.load(`${import.meta.env.BASE_URL}models/${mode.model}`, mode.pose);
     d.catch(() => cache.delete(mode.model)); // 실패하면 다음에 재시도
     cache.set(mode.model, d);
   }

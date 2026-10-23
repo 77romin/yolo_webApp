@@ -1,10 +1,6 @@
-import type { Detection, Detector } from './detector';
+import type { DetectOptions, Detection } from './detector';
+import type { RemoteDetector } from './detectorClient';
 import { drawDetections } from './overlay';
-
-export interface DetectOptions {
-  minScore: number;
-  classes?: Set<number>;
-}
 
 /**
  * 라이브 영상 위에서 추론을 반복한다. 녹화와는 독립적으로,
@@ -14,7 +10,7 @@ export class LiveInference {
   detections: Detection[] = [];
   fps = 0;
   enabled = true;
-  detector: Detector | null = null;
+  detector: RemoteDetector | null = null;
   options: DetectOptions = { minScore: 0.35 };
 
   private ctx: CanvasRenderingContext2D;

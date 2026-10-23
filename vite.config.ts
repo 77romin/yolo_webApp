@@ -14,4 +14,6 @@ export default defineConfig(({ mode }) => ({
   preview: { headers: isolation },
   // ort의 .wasm/.mjs를 new URL(..., import.meta.url)로 찾게 하려면 사전 번들링에서 제외해야 함
   optimizeDeps: { exclude: ['onnxruntime-web'] },
+  // 추론 워커가 ort를 동적 import 하므로 ES 모듈 워커로 빌드
+  worker: { format: 'es' },
 }));

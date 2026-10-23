@@ -14,6 +14,12 @@ export interface Detection {
 
 export type Backend = 'webgpu' | 'wasm';
 
+export interface DetectOptions {
+  minScore: number;
+  classes?: Set<number>;
+  iou?: number;
+}
+
 const SIZE = 416; // scripts/export_models.py 의 IMGSZ 와 같아야 함
 
 // ort 런타임을 별도 파일로 로드. 번들에 섞이면 멀티스레드 워커가 앱 번들(index.js)을
@@ -27,6 +33,7 @@ ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardw
 // (iOS Chrome UA에는 'Chrome/'가 없고 'CriOS/'가 있음)
 const isWebKit = /AppleWebKit/.test(navigator.userAgent) && !/Chrome\/|Chromium\/|Edg\//.test(navigator.userAgent);
 
+/** 실제 추론. 메인 스레드를 막지 않도록 detector.worker.ts 안에서만 사용한다 */
 export class Detector {
   private canvas = new OffscreenCanvas(SIZE, SIZE);
   private ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
@@ -56,9 +63,9 @@ export class Detector {
     throw new Error(`모델 로드 실패 — ${errors.join(' / ')}`);
   }
 
-  async detect(source: HTMLVideoElement, opts: { minScore: number; classes?: Set<number>; iou?: number }) {
-    const vw = source.videoWidth;
-    const vh = source.videoHeight;
+  async detect(source: ImageBitmap, opts: DetectOptions) {
+    const vw = source.width;
+    const vh = source.height;
     const scale = Math.min(SIZE / vw, SIZE / vh);
     const dw = Math.round(vw * scale);
     const dh = Math.round(vh * scale);
