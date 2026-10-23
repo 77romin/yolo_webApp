@@ -12,6 +12,7 @@ export class LiveInference {
   enabled = true;
   detector: RemoteDetector | null = null;
   options: DetectOptions = { minScore: 0.35 };
+  onResult?: (dets: Detection[]) => void;
 
   private ctx: CanvasRenderingContext2D;
   private busy = false;
@@ -68,6 +69,7 @@ export class LiveInference {
         if (!this.enabled || detector !== this.detector) return;
         this.detections = dets;
         this.draw();
+        this.onResult?.(dets);
         const now = performance.now();
         if (this.lastResult) this.fps = this.fps * 0.8 + (1000 / (now - this.lastResult)) * 0.2;
         this.lastResult = now;

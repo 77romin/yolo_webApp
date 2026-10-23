@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <title>YOLO 촬영</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <button id="btn-camera">카메라 켜기</button>
+      <button id="btn-record" disabled>● 녹화</button>
+      <button id="btn-flip" disabled>전환</button>
+      <button id="btn-boxes" class="on">박스 표시</button>
+      <span id="status"></span>
+    </header>
+
+    <div class="link-bar">
+      인식 기기 코드
+      <input id="code" inputmode="numeric" maxlength="6" placeholder="6자리" />
+      <button id="btn-link" disabled>연결</button>
+      <span id="link-state"></span>
+    </div>
+
+    <div id="save-bar" hidden>
+      <span id="save-info"></span>
+      <button id="btn-download">파일로 저장</button>
+      <button id="btn-share">공유 / 사진에 저장</button>
+      <button id="btn-discard">삭제</button>
+    </div>
+
+    <main id="panels">
+      <section id="live-panel" class="panel">
+        <video id="live" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+        <span class="badge live">LIVE</span>
+        <span id="rec-time" class="badge rec" hidden></span>
+      </section>
+    </main>
+
+    <script type="module" src="/src/camera-main.ts"></script>
+  </body>
+</html>

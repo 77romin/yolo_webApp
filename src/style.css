@@ -57,6 +57,45 @@ button.on {
   background: #1b3a1b;
 }
 
+.link-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 0 6px 6px;
+  font-size: 14px;
+}
+
+.link-bar input {
+  width: 6.5em;
+  font: inherit;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: #2a2a2a;
+  color: #eee;
+  text-align: center;
+  letter-spacing: 0.1em;
+}
+
+#studio-code {
+  font-size: 22px;
+  letter-spacing: 0.15em;
+  color: #ffd54f;
+}
+
+#studio-bar.connected #studio-state {
+  color: #69f0ae;
+}
+
+#btn-link.on {
+  background: #1b5e20;
+}
+
+#btn-boxes.on {
+  background: #1565c0;
+}
+
 #modes {
   display: flex;
   gap: 6px;

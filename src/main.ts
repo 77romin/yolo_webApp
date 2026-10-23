@@ -3,6 +3,7 @@ import { keepAwake, startCamera, stopStream, type Facing } from './camera';
 import { Compositor } from './compositor';
 import { FRAME_DELAY_MAX_MS, FrameDelay } from './frameDelay';
 import { LiveInference } from './inference';
+import { StudioLink, toMessage } from './link';
 import { formatClock, pickMimeType } from './media';
 import { detectorFor, MODES, type Mode } from './modes';
 import { registerPWA } from './pwa';
@@ -126,39 +127,47 @@ function videoReady(v: HTMLVideoElement) {
   return v.readyState >= 1 ? Promise.resolve() : new Promise((r) => v.addEventListener('loadedmetadata', r, { once: true }));
 }
 
-async function openCamera() {
+/** 영상 입력 연결 — 단독 모드는 내 카메라, 인식 기기(/studio) 모드는 촬영 기기에서 받은 스트림 */
+async function attach(next: MediaStream) {
   compositor.stop();
-  stopStream(stream);
-  stream = await startCamera(facing);
+  if (stream !== next) stopStream(stream);
+  stream = next;
   live.srcObject = stream;
   await videoReady(live);
+  live.play().catch(() => {});
   source = withBoxes() ? compositor.start(stream) : stream;
-  // 카메라가 켜져 있는 동안 되감기 버퍼는 항상 쌓는다 (녹화 버튼과 무관)
+  // 영상이 들어오는 동안 되감기 버퍼는 항상 쌓는다 (녹화 버튼과 무관)
   segments.start(source);
   inference.start();
   if (split) applyDelay(true);
+  [btnRecord, btnSplit, btnFlip].forEach((b) => (b.disabled = false));
 }
+
+async function detach() {
+  if (archive.recording) await stopRecording();
+  if (split) toggleSplit();
+  segments.stop();
+  segments.clear();
+  inference.stop();
+  compositor.stop();
+  stopStream(stream);
+  stream = source = null;
+  live.srcObject = null;
+  [btnRecord, btnSplit, btnFlip].forEach((b) => (b.disabled = true));
+}
+
+const openCamera = async () => attach(await startCamera(facing));
 
 btnCamera.onclick = async () => {
   if (stream) {
-    if (archive.recording) await stopRecording();
-    if (split) toggleSplit();
-    segments.stop();
-    segments.clear();
-    inference.stop();
-    compositor.stop();
-    stopStream(stream);
-    stream = source = null;
-    live.srcObject = null;
+    await detach();
     btnCamera.textContent = '카메라 켜기';
-    [btnRecord, btnSplit, btnFlip].forEach((b) => (b.disabled = true));
     return;
   }
   try {
     await openCamera();
     keepAwake();
     btnCamera.textContent = '카메라 끄기';
-    [btnRecord, btnSplit, btnFlip].forEach((b) => (b.disabled = false));
     setStatus('');
   } catch (e) {
     setStatus(`카메라 오류: ${(e as Error).message}`);
@@ -274,5 +283,34 @@ tsMute.onclick = () => {
   tsMute.textContent = muted ? '🔇' : '🔊';
   player.setMuted(muted);
 };
+
+// --- 인식 기기 모드 (/studio 또는 studio.도메인): 촬영 기기(iPhone)에서 영상을 받아 인식 ---
+
+if (location.pathname.startsWith('/studio') || location.hostname.startsWith('studio.')) {
+  document.title = 'YOLO 인식';
+  btnCamera.hidden = btnFlip.hidden = true;
+  const bar = $('studio-bar');
+  bar.hidden = false;
+  const link = new StudioLink();
+  const render = () => {
+    $('studio-code').textContent = link.code;
+    $<HTMLAnchorElement>('studio-url').textContent = link.cameraUrl;
+    $('studio-state').textContent = link.state;
+    bar.classList.toggle('connected', !!stream);
+  };
+  link.onState = render;
+  link.onStream = async (remote) => {
+    await attach(remote);
+    keepAwake();
+    render();
+  };
+  link.onLost = async () => {
+    await detach();
+    render();
+  };
+  // 인식 결과를 촬영 기기로 돌려보내 iPhone 화면에도 박스 표시
+  inference.onResult = (dets) => link.send(toMessage(dets, live.videoWidth, live.videoHeight));
+  render();
+}
 
 registerPWA();
